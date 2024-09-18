@@ -1,6 +1,6 @@
-name: 'Upload Release Asset'
-description: 'Upload a release asset to an existing release in your repository'
-author: 'tanyagray'
+name: 'Upload Release Asset By Upload Url'
+description: 'Upload a release asset to an existing release in your repository by upload url'
+author: 'codaline-io'
 inputs:
   upload_url:
     description: 'The URL for uploading assets to the release'
