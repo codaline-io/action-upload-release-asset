@@ -12,11 +12,7 @@ jest.mock('@actions/github', () => ({
     }
   },
   getOctokit: jest.fn().mockImplementation(() => ({
-    rest: {
-      repos: {
-        uploadReleaseAsset: mockUploadReleaseAsset
-      }
-    }
+    request: mockUploadReleaseAsset
   }))
 }));
 jest.mock('node:fs');
@@ -52,10 +48,11 @@ describe('Upload Release Asset', () => {
     await run();
 
     expect(mockUploadReleaseAsset).toHaveBeenCalledWith({
+      method: 'POST',
       url: 'upload_url',
       headers: { 'content-type': 'asset_content_type', 'content-length': 527 },
       name: 'asset_name',
-      file: content
+      data: content
     });
   });
 
