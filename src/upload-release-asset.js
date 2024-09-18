@@ -28,7 +28,7 @@ async function run() {
       name: assetName
     });
 
-    core.info({ uploadAssetResponse });
+    core.info(JSON.stringify(uploadAssetResponse, null, 2));
 
     // Get the browser_download_url for the uploaded release asset from the response
     const {
