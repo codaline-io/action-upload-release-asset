@@ -11,9 +11,11 @@ jest.mock('@actions/github', () => ({
       repo: 'repo'
     }
   },
-  GitHub: jest.fn().mockImplementation(() => ({
-    repos: {
-      uploadReleaseAsset: mockUploadReleaseAsset
+  getOctokit: jest.fn().mockImplementation(() => ({
+    rest: {
+      repos: {
+        uploadReleaseAsset: mockUploadReleaseAsset
+      }
     }
   }))
 }));
@@ -22,7 +24,6 @@ jest.mock('node:fs');
 const core = require('@actions/core');
 const fs = require('node:fs');
 const run = require('../src/upload-release-asset');
-
 /* eslint-disable no-undef */
 describe('Upload Release Asset', () => {
   let content;
