@@ -20,11 +20,12 @@ async function run() {
     const headers = { 'content-type': assetContentType, 'content-length': contentLength(assetPath) };
 
     // Upload a release asset
-    const uploadAssetResponse = await octokit.rest.repos.uploadReleaseAsset({
+    const uploadAssetResponse = await octokit.request({
+      method: 'POST',
       url: uploadUrl,
       headers,
-      name: assetName,
-      file: fs.readFileSync(assetPath)
+      data: fs.readFileSync(assetPath),
+      name: assetName
     });
 
     core.info({ uploadAssetResponse });
