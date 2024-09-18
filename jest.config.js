@@ -1,8 +1,6 @@
 module.exports = {
-  testEnvironment: "node",
-  collectCoverageFrom: [
-    "src/upload-release-asset.js"
-  ],
+  testEnvironment: 'node',
+  collectCoverageFrom: ['src/upload-release-asset.js'],
   coverageThreshold: {
     global: {
       branches: 80,
@@ -10,9 +8,6 @@ module.exports = {
       lines: 80,
       statements: 80
     }
-  },
-  transform: {
-    "^.+\\.js?$": "babel-jest"
   },
   transformIgnorePatterns: ['node_modules/(?!@actions/github)']
 };

@@ -1063,7 +1063,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 // Originally pulled from https://github.com/JasonEtco/actions-toolkit/blob/master/src/github.ts
-const graphql_1 = __nccwpck_require__(8777);
+const graphql_1 = __nccwpck_require__(5699);
 const rest_1 = __importDefault(__nccwpck_require__(9351));
 const Context = __importStar(__nccwpck_require__(4087));
 // We need this in order to extend Octokit
@@ -51265,22 +51265,6 @@ module.exports = run;
 
 /***/ }),
 
-/***/ 5503:
-/***/ ((module) => {
-
-module.exports = eval("require")("@octokit-next/endpoint");
-
-
-/***/ }),
-
-/***/ 7970:
-/***/ ((module) => {
-
-module.exports = eval("require")("@octokit-next/request-error");
-
-
-/***/ }),
-
 /***/ 2877:
 /***/ ((module) => {
 
@@ -53162,7 +53146,7 @@ module.exports = parseParams
 
 /***/ }),
 
-/***/ 8777:
+/***/ 5699:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __nccwpck_require__) => {
 
 "use strict";
@@ -53176,8 +53160,454 @@ __nccwpck_require__.d(__webpack_exports__, {
   "withCustomRequest": () => (/* binding */ withCustomRequest)
 });
 
-// EXTERNAL MODULE: ./node_modules/@vercel/ncc/dist/ncc/@@notfound.js?@octokit-next/endpoint
-var endpoint = __nccwpck_require__(5503);
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/endpoint/lib/util/lowercase-keys.js
+function lowercaseKeys(object) {
+  if (!object) {
+    return {};
+  }
+
+  return Object.keys(object).reduce((newObj, key) => {
+    newObj[key.toLowerCase()] = object[key];
+    return newObj;
+  }, {});
+}
+
+;// CONCATENATED MODULE: ./node_modules/is-plain-obj/index.js
+function isPlainObject(value) {
+	if (typeof value !== 'object' || value === null) {
+		return false;
+	}
+
+	const prototype = Object.getPrototypeOf(value);
+	return (prototype === null || prototype === Object.prototype || Object.getPrototypeOf(prototype) === null) && !(Symbol.toStringTag in value) && !(Symbol.iterator in value);
+}
+
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/endpoint/lib/util/merge-deep.js
+
+
+function mergeDeep(defaults, options) {
+  const result = Object.assign({}, defaults);
+
+  Object.keys(options).forEach((key) => {
+    if (isPlainObject(options[key])) {
+      if (!(key in defaults)) Object.assign(result, { [key]: options[key] });
+      else result[key] = mergeDeep(defaults[key], options[key]);
+    } else {
+      Object.assign(result, { [key]: options[key] });
+    }
+  });
+
+  return result;
+}
+
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/endpoint/lib/util/remove-undefined-properties.js
+function removeUndefinedProperties(obj) {
+  for (const key in obj) {
+    if (obj[key] === undefined) {
+      delete obj[key];
+    }
+  }
+  return obj;
+}
+
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/endpoint/lib/merge.js
+
+
+
+
+function merge(defaults, route, options) {
+  if (typeof route === "string") {
+    let [method, url] = route.split(" ");
+    options = Object.assign(url ? { method, url } : { url: method }, options);
+  } else {
+    options = Object.assign({}, route);
+  }
+
+  // lowercase header names before merging with defaults to avoid duplicates
+  options.headers = lowercaseKeys(options.headers);
+
+  // remove properties with undefined values before merging
+  removeUndefinedProperties(options);
+  removeUndefinedProperties(options.headers);
+
+  const mergedOptions = mergeDeep(defaults || {}, options);
+
+  // mediaType.previews arrays are merged, instead of overwritten
+  if (defaults && defaults.mediaType.previews.length) {
+    mergedOptions.mediaType.previews = defaults.mediaType.previews
+      .filter((preview) => !mergedOptions.mediaType.previews.includes(preview))
+      .concat(mergedOptions.mediaType.previews);
+  }
+
+  mergedOptions.mediaType.previews = mergedOptions.mediaType.previews.map(
+    (preview) => preview.replace(/-preview/, "")
+  );
+
+  return mergedOptions;
+}
+
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/endpoint/lib/util/add-query-parameters.js
+function addQueryParameters(url, parameters) {
+  const separator = /\?/.test(url) ? "&" : "?";
+  const names = Object.keys(parameters);
+
+  if (names.length === 0) {
+    return url;
+  }
+
+  const query = names
+    .map((name) => {
+      if (name === "q") {
+        return "q=" + parameters.q.split("+").map(encodeURIComponent).join("+");
+      }
+
+      return `${name}=${encodeURIComponent(parameters[name])}`;
+    })
+    .join("&");
+
+  return url + separator + query;
+}
+
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/endpoint/lib/util/extract-url-variable-names.js
+const urlVariableRegex = /\{[^}]+\}/g;
+
+function removeNonChars(variableName) {
+  return variableName.replace(/^\W+|\W+$/g, "").split(/,/);
+}
+
+function extractUrlVariableNames(url) {
+  const matches = url.match(urlVariableRegex);
+
+  if (!matches) {
+    return [];
+  }
+
+  return matches.map(removeNonChars).reduce((a, b) => a.concat(b), []);
+}
+
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/endpoint/lib/util/omit.js
+function omit(object, keysToOmit) {
+  return Object.keys(object)
+    .filter((option) => !keysToOmit.includes(option))
+    .reduce((obj, key) => {
+      obj[key] = object[key];
+      return obj;
+    }, {});
+}
+
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/endpoint/lib/util/url-template.js
+// Based on https://github.com/bramstein/url-template, licensed under BSD
+// TODO: create separate package.
+//
+// Copyright (c) 2012-2014, Bram Stein
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions
+// are met:
+
+//  1. Redistributions of source code must retain the above copyright
+//     notice, this list of conditions and the following disclaimer.
+//  2. Redistributions in binary form must reproduce the above copyright
+//     notice, this list of conditions and the following disclaimer in the
+//     documentation and/or other materials provided with the distribution.
+//  3. The name of the author may not be used to endorse or promote products
+//     derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE AUTHOR "AS IS" AND ANY EXPRESS OR IMPLIED
+// WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+// EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+// INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+// BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
+// OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+// EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+/* c8 ignore start */
+
+function encodeReserved(str) {
+  return str
+    .split(/(%[0-9A-Fa-f]{2})/g)
+    .map(function (part) {
+      if (!/%[0-9A-Fa-f]/.test(part)) {
+        part = encodeURI(part).replace(/%5B/g, "[").replace(/%5D/g, "]");
+      }
+      return part;
+    })
+    .join("");
+}
+
+function encodeUnreserved(str) {
+  return encodeURIComponent(str).replace(/[!'()*]/g, function (c) {
+    return "%" + c.charCodeAt(0).toString(16).toUpperCase();
+  });
+}
+
+function encodeValue(operator, value, key) {
+  value =
+    operator === "+" || operator === "#"
+      ? encodeReserved(value)
+      : encodeUnreserved(value);
+
+  if (key) {
+    return encodeUnreserved(key) + "=" + value;
+  } else {
+    return value;
+  }
+}
+
+function isDefined(value) {
+  return value !== undefined && value !== null;
+}
+
+function isKeyOperator(operator) {
+  return operator === ";" || operator === "&" || operator === "?";
+}
+
+function getValues(context, operator, key, modifier) {
+  var value = context[key],
+    result = [];
+
+  if (isDefined(value) && value !== "") {
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      value = value.toString();
+
+      if (modifier && modifier !== "*") {
+        value = value.substring(0, parseInt(modifier, 10));
+      }
+
+      result.push(
+        encodeValue(operator, value, isKeyOperator(operator) ? key : "")
+      );
+    } else {
+      if (modifier === "*") {
+        if (Array.isArray(value)) {
+          value.filter(isDefined).forEach(function (value) {
+            result.push(
+              encodeValue(operator, value, isKeyOperator(operator) ? key : "")
+            );
+          });
+        } else {
+          Object.keys(value).forEach(function (k) {
+            if (isDefined(value[k])) {
+              result.push(encodeValue(operator, value[k], k));
+            }
+          });
+        }
+      } else {
+        const tmp = [];
+
+        if (Array.isArray(value)) {
+          value.filter(isDefined).forEach(function (value) {
+            tmp.push(encodeValue(operator, value));
+          });
+        } else {
+          Object.keys(value).forEach(function (k) {
+            if (isDefined(value[k])) {
+              tmp.push(encodeUnreserved(k));
+              tmp.push(encodeValue(operator, value[k].toString()));
+            }
+          });
+        }
+
+        if (isKeyOperator(operator)) {
+          result.push(encodeUnreserved(key) + "=" + tmp.join(","));
+        } else if (tmp.length !== 0) {
+          result.push(tmp.join(","));
+        }
+      }
+    }
+  } else {
+    if (operator === ";") {
+      if (isDefined(value)) {
+        result.push(encodeUnreserved(key));
+      }
+    } else if (value === "" && (operator === "&" || operator === "?")) {
+      result.push(encodeUnreserved(key) + "=");
+    } else if (value === "") {
+      result.push("");
+    }
+  }
+  return result;
+}
+
+function parseUrl(template) {
+  return {
+    expand: expand.bind(null, template),
+  };
+}
+
+function expand(template, context) {
+  var operators = ["+", "#", ".", "/", ";", "?", "&"];
+
+  return template.replace(
+    /\{([^\{\}]+)\}|([^\{\}]+)/g,
+    function (_, expression, literal) {
+      if (expression) {
+        let operator = "";
+        const values = [];
+
+        if (operators.indexOf(expression.charAt(0)) !== -1) {
+          operator = expression.charAt(0);
+          expression = expression.substr(1);
+        }
+
+        expression.split(/,/g).forEach(function (variable) {
+          var tmp = /([^:\*]*)(?::(\d+)|(\*))?/.exec(variable);
+          values.push(getValues(context, operator, tmp[1], tmp[2] || tmp[3]));
+        });
+
+        if (operator && operator !== "+") {
+          var separator = ",";
+
+          if (operator === "?") {
+            separator = "&";
+          } else if (operator !== "#") {
+            separator = operator;
+          }
+          return (values.length !== 0 ? operator : "") + values.join(separator);
+        } else {
+          return values.join(",");
+        }
+      } else {
+        return encodeReserved(literal);
+      }
+    }
+  );
+}
+
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/endpoint/lib/parse.js
+
+
+
+
+
+function parse(options) {
+  // https://fetch.spec.whatwg.org/#methods
+  let method = options.method.toUpperCase();
+
+  // replace :varname with {varname} to make it RFC 6570 compatible
+  let url = (options.url || "/").replace(/:([a-z]\w+)/g, "{$1}");
+  let headers = Object.assign({}, options.headers);
+  let body;
+  let parameters = omit(options, [
+    "method",
+    "baseUrl",
+    "url",
+    "headers",
+    "request",
+    "mediaType",
+  ]);
+
+  // extract variable names from URL to calculate remaining variables later
+  const urlVariableNames = extractUrlVariableNames(url);
+
+  url = parseUrl(url).expand(parameters);
+
+  if (!/^http/.test(url)) {
+    url = options.baseUrl + url;
+  }
+
+  const omittedParameters = Object.keys(options)
+    .filter((option) => urlVariableNames.includes(option))
+    .concat("baseUrl");
+  const remainingParameters = omit(parameters, omittedParameters);
+
+  const isBinaryRequest = /application\/octet-stream/i.test(headers.accept);
+
+  if (!isBinaryRequest) {
+    if (options.mediaType.format) {
+      // e.g. application/vnd.github.v3+json => application/vnd.github.v3.raw
+      headers.accept = headers.accept
+        .split(/,/)
+        .map((preview) =>
+          preview.replace(
+            /application\/vnd(\.\w+)(\.v3)?(\.\w+)?(\+json)?$/,
+            `application/vnd$1$2.${options.mediaType.format}`
+          )
+        )
+        .join(",");
+    }
+
+    if (options.mediaType.previews.length) {
+      const previewsFromAcceptHeader =
+        headers.accept.match(/[\w-]+(?=-preview)/g) || [];
+      headers.accept = previewsFromAcceptHeader
+        .concat(options.mediaType.previews)
+        .map((preview) => {
+          const format = options.mediaType.format
+            ? `.${options.mediaType.format}`
+            : "+json";
+          return `application/vnd.github.${preview}-preview${format}`;
+        })
+        .join(",");
+    }
+  }
+
+  // for GET/HEAD requests, set URL query parameters from remaining parameters
+  // for PATCH/POST/PUT/DELETE requests, set request body from remaining parameters
+  if (["GET", "HEAD"].includes(method)) {
+    url = addQueryParameters(url, remainingParameters);
+  } else {
+    if ("data" in remainingParameters) {
+      body = remainingParameters.data;
+    } else {
+      if (Object.keys(remainingParameters).length) {
+        body = remainingParameters;
+      }
+    }
+  }
+
+  // default content-type for JSON if body is set
+  if (!headers["content-type"] && typeof body !== "undefined") {
+    headers["content-type"] = "application/json; charset=utf-8";
+  }
+
+  // GitHub expects 'content-length: 0' header for PUT/PATCH requests without body.
+  // fetch does not allow to set `content-length` header, but we can set body to an empty string
+  if (["PATCH", "PUT"].includes(method) && typeof body === "undefined") {
+    body = "";
+  }
+
+  // Only return body/request keys if present
+  return Object.assign(
+    { method, url, headers },
+    typeof body !== "undefined" ? { body } : null,
+    options.request ? { request: options.request } : null
+  );
+}
+
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/endpoint/lib/endpoint-with-defaults.js
+
+
+
+function endpointWithDefaults(defaults, route, options) {
+  return parse(merge(defaults, route, options));
+}
+
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/endpoint/lib/with-defaults.js
+
+
+
+
+function withDefaults(oldDefaults, newDefaults) {
+  const DEFAULTS = merge(oldDefaults, newDefaults);
+  const endpoint = endpointWithDefaults.bind(null, DEFAULTS);
+
+  return Object.assign(endpoint, {
+    DEFAULTS,
+    defaults: withDefaults.bind(null, DEFAULTS),
+    merge: merge.bind(null, DEFAULTS),
+    parse: parse,
+  });
+}
+
 ;// CONCATENATED MODULE: ./node_modules/universal-user-agent/index.js
 function getUserAgent() {
   if (typeof navigator === "object" && "userAgent" in navigator) {
@@ -53193,8 +53623,40 @@ function getUserAgent() {
   return "<environment undetectable>";
 }
 
-;// CONCATENATED MODULE: ./node_modules/@octokit-next/request/version.js
-const VERSION = "0.0.0-development";
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/endpoint/lib/version.js
+const VERSION = "2.8.0";
+
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/endpoint/lib/defaults.js
+
+
+
+
+const userAgent = `octokit-next-endpoint.js/${VERSION} ${getUserAgent()}`;
+
+// DEFAULTS has all properties set that EndpointOptions has, except url.
+// So we use RequestParameters and add method as additional required property.
+const DEFAULTS = {
+  method: "GET",
+  baseUrl: "https://api.github.com",
+  headers: {
+    accept: "application/vnd.github.v3+json",
+    "user-agent": userAgent,
+  },
+  mediaType: {
+    format: "",
+    previews: [],
+  },
+};
+
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/endpoint/index.js
+
+
+
+
+const endpoint = withDefaults(null, DEFAULTS);
+
+;// CONCATENATED MODULE: ./node_modules/@octokit/graphql/node_modules/@octokit-next/request/version.js
+const version_VERSION = "0.0.0-development";
 
 ;// CONCATENATED MODULE: ./node_modules/is-plain-object/dist/is-plain-object.mjs
 /*!
@@ -53208,7 +53670,7 @@ function isObject(o) {
   return Object.prototype.toString.call(o) === '[object Object]';
 }
 
-function isPlainObject(o) {
+function is_plain_object_isPlainObject(o) {
   var ctor,prot;
 
   if (isObject(o) === false) return false;
@@ -53232,16 +53694,75 @@ function isPlainObject(o) {
 
 
 
-// EXTERNAL MODULE: ./node_modules/@vercel/ncc/dist/ncc/@@notfound.js?@octokit-next/request-error
-var request_error = __nccwpck_require__(7970);
-;// CONCATENATED MODULE: ./node_modules/@octokit-next/request/get-buffer-response.js
+;// CONCATENATED MODULE: ./node_modules/@octokit-next/request-error/index.js
+/**
+ * Error with extra properties to help with debugging
+ */
+class RequestError extends Error {
+  name;
+
+  /**
+   * http status code
+   */
+  status;
+
+  /**
+   * Request options that lead to the error.
+   */
+  request;
+
+  /**
+   * Response object if a response was received
+   */
+  response;
+
+  constructor(message, statusCode, options) {
+    super(message);
+
+    // Maintains proper stack trace (only available on V8)
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    }
+
+    this.name = "HttpError";
+    this.status = statusCode;
+
+    if ("response" in options) {
+      this.response = options.response;
+    }
+
+    // redact request credentials without mutating original request options
+    const requestCopy = { ...options.request };
+    if (options.request.headers.authorization) {
+      requestCopy.headers = {
+        ...options.request.headers,
+        authorization: options.request.headers.authorization.replace(
+          / .*$/,
+          " [REDACTED]"
+        ),
+      };
+    }
+
+    requestCopy.url = requestCopy.url
+      // client_id & client_secret can be passed as URL query parameters to increase rate limit
+      // see https://developer.github.com/v3/#increasing-the-unauthenticated-rate-limit-for-oauth-applications
+      .replace(/\bclient_secret=\w+/g, "client_secret=[REDACTED]")
+      // OAuth tokens can be passed as URL query parameters, although it is not recommended
+      // see https://developer.github.com/v3/#oauth2-token-sent-in-a-header
+      .replace(/\baccess_token=\w+/g, "access_token=[REDACTED]");
+
+    this.request = requestCopy;
+  }
+}
+
+;// CONCATENATED MODULE: ./node_modules/@octokit/graphql/node_modules/@octokit-next/request/get-buffer-response.js
 /* c8 ignore next 4 */
 // TODO: figure out how to test buffers
 function getBufferResponse(response) {
   return response.arrayBuffer();
 }
 
-;// CONCATENATED MODULE: ./node_modules/@octokit-next/request/fetch-wrapper.js
+;// CONCATENATED MODULE: ./node_modules/@octokit/graphql/node_modules/@octokit-next/request/fetch-wrapper.js
 
 
 
@@ -53251,7 +53772,7 @@ function fetchWrapper(requestOptions) {
   const log = requestOptions.request?.log || console;
 
   if (
-    isPlainObject(requestOptions.body) ||
+    is_plain_object_isPlainObject(requestOptions.body) ||
     Array.isArray(requestOptions.body)
   ) {
     requestOptions.body = JSON.stringify(requestOptions.body);
@@ -53306,7 +53827,7 @@ function fetchWrapper(requestOptions) {
         if (status < 400) {
           return;
         }
-        throw new request_error.RequestError(response.statusText, status, {
+        throw new RequestError(response.statusText, status, {
           response: {
             url,
             status,
@@ -53318,7 +53839,7 @@ function fetchWrapper(requestOptions) {
       }
 
       if (status === 304) {
-        throw new request_error.RequestError("Not modified", status, {
+        throw new RequestError("Not modified", status, {
           response: {
             url,
             status,
@@ -53331,7 +53852,7 @@ function fetchWrapper(requestOptions) {
 
       if (status >= 400) {
         const data = await getResponseData(response);
-        const error = new request_error.RequestError(toErrorMessage(data), status, {
+        const error = new RequestError(toErrorMessage(data), status, {
           response: {
             url,
             status,
@@ -53356,11 +53877,11 @@ function fetchWrapper(requestOptions) {
     })
 
     .catch((error) => {
-      if (error instanceof request_error.RequestError) throw error;
+      if (error instanceof RequestError) throw error;
 
       if (error.name === "AbortError") throw error;
 
-      throw new request_error.RequestError(error.message, 500, {
+      throw new RequestError(error.message, 500, {
         request: requestOptions,
       });
     });
@@ -53395,10 +53916,10 @@ function toErrorMessage(data) {
   return `Unknown error: ${JSON.stringify(data)}`;
 }
 
-;// CONCATENATED MODULE: ./node_modules/@octokit-next/request/with-defaults.js
+;// CONCATENATED MODULE: ./node_modules/@octokit/graphql/node_modules/@octokit-next/request/with-defaults.js
 
 
-function withDefaults(oldEndpoint, newDefaults) {
+function with_defaults_withDefaults(oldEndpoint, newDefaults) {
   const endpoint = oldEndpoint.defaults(newDefaults);
   const newApi = function (route, parameters) {
     const endpointOptions = endpoint.merge(route, parameters);
@@ -53413,7 +53934,7 @@ function withDefaults(oldEndpoint, newDefaults) {
 
     Object.assign(request, {
       endpoint,
-      defaults: withDefaults.bind(null, endpoint),
+      defaults: with_defaults_withDefaults.bind(null, endpoint),
     });
 
     return endpointOptions.request.hook(request, endpointOptions);
@@ -53421,25 +53942,25 @@ function withDefaults(oldEndpoint, newDefaults) {
 
   return Object.assign(newApi, {
     endpoint,
-    defaults: withDefaults.bind(null, endpoint),
+    defaults: with_defaults_withDefaults.bind(null, endpoint),
   });
 }
 
-;// CONCATENATED MODULE: ./node_modules/@octokit-next/request/index.js
+;// CONCATENATED MODULE: ./node_modules/@octokit/graphql/node_modules/@octokit-next/request/index.js
 
 
 
 
 
 
-const request = withDefaults(endpoint.endpoint, {
+const request = with_defaults_withDefaults(endpoint, {
   headers: {
-    "user-agent": `octokit-request.js/${VERSION} ${getUserAgent()}`,
+    "user-agent": `octokit-request.js/${version_VERSION} ${getUserAgent()}`,
   },
 });
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/graphql/version.js
-const version_VERSION = "0.0.0-development";
+const graphql_version_VERSION = "0.0.0-development";
 
 ;// CONCATENATED MODULE: ./node_modules/@octokit/graphql/error.js
 function _buildMessageForResponseErrors(data) {
@@ -53543,14 +54064,14 @@ function graphql(request, query, options) {
 ;// CONCATENATED MODULE: ./node_modules/@octokit/graphql/with-defaults.js
 
 
-function with_defaults_withDefaults(oldRequest, newDefaults) {
+function graphql_with_defaults_withDefaults(oldRequest, newDefaults) {
   const newRequest = oldRequest.defaults(newDefaults);
   const newApi = (query, options) => {
     return graphql(newRequest, query, options);
   };
 
   return Object.assign(newApi, {
-    defaults: with_defaults_withDefaults.bind(null, newRequest),
+    defaults: graphql_with_defaults_withDefaults.bind(null, newRequest),
     endpoint: newRequest.endpoint,
   });
 }
@@ -53563,9 +54084,9 @@ function with_defaults_withDefaults(oldRequest, newDefaults) {
 
 
 
-const graphql_graphql = with_defaults_withDefaults(request, {
+const graphql_graphql = graphql_with_defaults_withDefaults(request, {
   headers: {
-    "user-agent": `octokit-graphql.js/${version_VERSION} ${getUserAgent()}`,
+    "user-agent": `octokit-graphql.js/${graphql_version_VERSION} ${getUserAgent()}`,
   },
   method: "POST",
   url: "/graphql",
@@ -53574,7 +54095,7 @@ const graphql_graphql = with_defaults_withDefaults(request, {
 
 
 function withCustomRequest(customRequest) {
-  return with_defaults_withDefaults(customRequest, {
+  return graphql_with_defaults_withDefaults(customRequest, {
     method: "POST",
     url: "/graphql",
   });
